@@ -8,11 +8,38 @@ from time import sleep
 import requests
 import zipfile
 import io
-
+from new_converter import Converter
+import sys
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 USERNAME = ''
 PASSWORD = ''
+
+# credit goes to greenstick https://stackoverflow.com/questions/3173320/text-progress-bar-in-the-console
+
+
+def printProgressBar(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
+    """
+    Call in a loop to create terminal progress bar
+    @params:
+        iteration   - Required  : current iteration (Int)
+        total       - Required  : total iterations (Int)
+        prefix      - Optional  : prefix string (Str)
+        suffix      - Optional  : suffix string (Str)
+        decimals    - Optional  : positive number of decimals in percent complete (Int)
+        length      - Optional  : character length of bar (Int)
+        fill        - Optional  : bar fill character (Str)
+        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 *
+                                                     (iteration / float(total)))
+    filledLength = int(length * iteration // total)
+    bar = fill * filledLength + '-' * (length - filledLength)
+    sys.stdout.write(f'\r{prefix} |{bar}| {percent}% {suffix}')
+    sys.stdout.flush()
+    # Print New Line on Complete
+    if iteration == total:
+        print()
 
 
 class Lms:
@@ -21,7 +48,7 @@ class Lms:
         self.password = password
         self._links = []
         self.downloaded_files_folder = 'Adobe_Download_Files'
-        self.__download_folder = os.path.join(os.path.expanduser(
+        self.download_folder = os.path.join(os.path.expanduser(
             '~'), 'Downloads', self.downloaded_files_folder)
         self.agent_cookie = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.66 Safari/537.36'
         self.host = ''
@@ -29,8 +56,8 @@ class Lms:
             'User-Agent': self.agent_cookie
         }
         self.__session = requests.Session()
-        if not os.path.isdir(self.__download_folder):
-            os.makedirs(self.__download_folder)
+        if not os.path.isdir(self.download_folder):
+            os.makedirs(self.download_folder)
 
     def __class_list(self):
         _session = requests.Session()
@@ -85,27 +112,46 @@ class Lms:
         self.adobe_server = self.get_server(
             int(self.__classes[class_session]['href'][-1]))
         self.__session.get('https://'+self.host + self.__classes[class_session]['href'], headers={
-                               'User-Agent': self.agent_cookie}, verify=False)
+            'User-Agent': self.agent_cookie}, verify=False)
         _download_url = self.adobe_server + \
             f'/{self.video_id}' + '/output' + \
             f'/{self.video_id}.zip?download=zip'
         return _download_url
 
     def __get_cookies_from_adobe_server(self):
-        self.__session.get(f'{self.adobe_server}/system/get-player?urlPath=/{self.video_id}/',
-                           headers={'User-Agent': self.agent_cookie})
+        r = self.__session.get(f'{self.adobe_server}/system/get-player?urlPath=/{self.video_id}/',
+                               headers={'User-Agent': self.agent_cookie})
+        self.__session.cookies.set(r.headers['Set-Cookie'].split(';')[0].split('=')[
+                                   0], r.headers['Set-Cookie'].split(';')[0].split('=')[1], path='/', domain=self.adobe_server[7:])
         self.__set_headers(self.adobe_server.split('/')[-1])
 
     def __download__(self, url):
         self.__get_cookies_from_adobe_server()
+        zip_file = os.path.join(self.download_folder, self.video_id + '.zip')
+        current_size = 0
 
-        print('Downloading ...')
-        r = self.__session.get(url, headers=self.headers)
-        z = zipfile.ZipFile(io.BytesIO(r.content))
+        with open(zip_file, 'wb') as f:
+            current_size = 0
+            with self.__session.get(url, headers=self.headers, stream=True) as r:
+                total_size = int(r.headers['content-length'])
+                try:
+                    print(
+                        f'Downloading ...\nFile size [{round(int(r.headers["content-length"]) / 10 ** 6, 3)}MB]')
+                except:
+                    raise ValueError('Site is not accessible!')
+                for chunk in r.iter_content(chunk_size=1024):
+                    f.write(chunk)
+                    current_size += sys.getsizeof(chunk)
+                    printProgressBar(current_size, total_size)
+
+        z = zipfile.ZipFile(zip_file)
         print('Download compeleted ...')
         print('Extracting ...')
-        z.extractall(os.path.join(self.__download_folder, self.name))
+        z.extractall(os.path.join(self.download_folder, self.name))
         print('Extract Compeleted ...')
+        print('Removing zip file')
+        os.remove(zip_file)
+        print('zip file removed')
 
     # the main program
     def run(self):
@@ -134,5 +180,9 @@ class Lms:
 
         self.__download__(self.__get_download_url(_class_session))
 
+
 l = Lms(USERNAME, PASSWORD)
 l.run()
+
+f = Converter(os.path.join(l.download_folder, l.name))
+f.convert(l.name, 'video')
