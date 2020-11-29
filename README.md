@@ -1,7 +1,5 @@
 # SBU Class Downloader
 
----
-
 ### Install
 
 - modules needed for this script:
