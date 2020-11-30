@@ -10,37 +10,14 @@ import zipfile
 import io
 from new_converter import Converter
 import sys
+from tqdm import tqdm
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 USERNAME = ''
 PASSWORD = ''
 
 # credit goes to greenstick https://stackoverflow.com/questions/3173320/text-progress-bar-in-the-console
-
-
-def printProgressBar(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
-    """
-    Call in a loop to create terminal progress bar
-    @params:
-        iteration   - Required  : current iteration (Int)
-        total       - Required  : total iterations (Int)
-        prefix      - Optional  : prefix string (Str)
-        suffix      - Optional  : suffix string (Str)
-        decimals    - Optional  : positive number of decimals in percent complete (Int)
-        length      - Optional  : character length of bar (Int)
-        fill        - Optional  : bar fill character (Str)
-        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
-    """
-    percent = ("{0:." + str(decimals) + "f}").format(100 *
-                                                     (iteration / float(total)))
-    filledLength = int(length * iteration // total)
-    bar = fill * filledLength + '-' * (length - filledLength)
-    sys.stdout.write(f'\r{prefix} |{bar}| {percent}% {suffix}')
-    sys.stdout.flush()
-    # Print New Line on Complete
-    if iteration == total:
-        print()
-
 
 class Lms:
     def __init__(self, username, password):
@@ -134,24 +111,23 @@ class Lms:
             current_size = 0
             with self.__session.get(url, headers=self.headers, stream=True) as r:
                 total_size = int(r.headers['content-length'])
+                t = tqdm(total=total_size)
                 try:
                     print(
                         f'Downloading ...\nFile size [{round(int(r.headers["content-length"]) / 10 ** 6, 3)}MB]')
                 except:
                     raise ValueError('Site is not accessible!')
                 for chunk in r.iter_content(chunk_size=1024):
-                    f.write(chunk)
                     current_size += sys.getsizeof(chunk)
-                    printProgressBar(current_size, total_size)
+                    t.update(sys.getsizeof(chunk))
+                    f.write(chunk)
+                t.close()
 
         z = zipfile.ZipFile(zip_file)
         print('Download compeleted ...')
         print('Extracting ...')
         z.extractall(os.path.join(self.download_folder, self.name))
-        print('Extract Compeleted ...')
-        print('Removing zip file')
-        os.remove(zip_file)
-        print('zip file removed')
+        print('Extracting Compeleted ...')
 
     # the main program
     def run(self):
