@@ -2,7 +2,6 @@ from bs4 import BeautifulSoup
 import os
 import re
 from pymediainfo import MediaInfo
-import ffmpeg
 
 
 class Converter:
