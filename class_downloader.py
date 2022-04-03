@@ -38,25 +38,46 @@ class Lms:
 
     def __class_list(self):
         _session = requests.Session()
-        html = _session.post(
-            'http://vu.sbu.ac.ir/vu99/course.list.php', data={'username': self.username}).text
+        raw = _session.post(
+            'http://vu.sbu.ac.ir/class/course.list.php', data={'username': self.username})
+
+        html = raw.text
         _classes = BeautifulSoup(html, 'html.parser')
 
         for cl in _classes.select('a[href^="https://lms"]'):
             self._links += [(cl.text, cl['href'])]
 
+    def __get_login_token(self, html):
+        html = BeautifulSoup(html, 'html.parser')
+
+        a = html.find(name='input', attrs={
+            'type': 'hidden',
+            'name': 'logintoken'
+        })
+
+        return a.attrs['value']
+
+
     def __login(self):
-        self.__session.get('https://'+self.host +
+        login_page = self.__session.get('https://'+self.host +
                            '/login/index.php', verify=False)
-        self.__session.post('https://'+self.host+'/login/index.php', data={
-                            'username': self.username, 'password': self.password}, headers=self.headers, verify=False)
+
+        self.login_token = self.__get_login_token(login_page.text)
+
+        a = self.__session.post('https://'+self.host+'/login/index.php', data={
+                            'username': self.username, 'password': self.password, 'logintoken': self.login_token}, headers=self.headers, verify=False)
+
+        print(a)
+
+        with open('sample.html', 'w') as f:
+            f.write(f"{a.content}")
         self.__set_headers(self.host)
 
     def __session_list(self, course):
         self.__login()
 
         html = BeautifulSoup(self.__session.get(
-            self._links[course][1], headers=self.headers, verify=False).text, 'html.parser')
+            self._links[course][1], headers=self.headers, verify=False).text, 'html.parser')    
         html_course = BeautifulSoup(self.__session.get(html.select('li.onlineclass div.activityinstance > a')[
                                     0]['href'] + '&action=recording.list', headers=self.headers, verify=False).text, 'html.parser')
         _courses = html_course.select(
@@ -75,7 +96,7 @@ class Lms:
         if no == 1:
             _base_url = 'http://vc10.sbu.ac.ir'
         elif no == 2:
-            _base_url = 'http://vc15.sbu.ac.ir'
+            _base_url = 'http://vc11.sbu.ac.ir'
 
         return _base_url
 
